@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "CyberPilot",
+  "version": "0.1.0",
+  "description": "AI-powered cybersecurity assistant: voice-to-command generation with scope and authorization enforcement. Copy-only workflow — never auto-executes.",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "CyberPilot"
+  },
+  "icons": {},
+  "permissions": [
+    "storage",
+    "clipboardWrite"
+  ],
+  "optional_permissions": [
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+Y" },
+      "description": "Open CyberPilot"
+    }
+  }
+}
