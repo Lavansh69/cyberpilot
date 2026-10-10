@@ -44,10 +44,82 @@ describe('renderTemplate', () => {
     if (r.ok) expect(r.command).toBe('nmap -sV 10.0.0.5');
   });
 
-  it('rejects unresolved tokens', () => param-less check...
-  it('rejects values containing tokens', () => {
+  it('rejects a value that injects a token', () => {
     const t = registry.getTemplate('nmap.service-detect.v1')!;
     const r = renderTemplate(t, { target: '{{other}}' });
-    expect(r.ok && r.command.includes('{{')).toBe(false);
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('generateCommand pipeline', () => {
+  it('generates an authorized nmap command', async () => {
+    const t = registry.getTemplate('nmap.service-detect.v1')!;
+    const res = await generateCommand({
+      template: t,
+      target: makeTarget(),
+      suppliedParams: {},
+      authorizations: [makeAuth()],
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.candidate.command).toBe('nmap -sV 10.0.0.5');
+      expect(res.candidate.riskLevel).toBe(2);
+      expect(res.candidate.commandHash).toHaveLength(64);
+    }
+  });
+
+  it('blocks generation without authorization', async () => {
+    const t = registry.getTemplate('nmap.service-detect.v1')!;
+    const res = await generateCommand({
+      template: t,
+      target: makeTarget(),
+      suppliedParams: {},
+      authorizations: [],
+      now: NOW,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.type).toBe('out-of-scope');
+  });
+
+  it('blocks when the tool is not installed', async () => {
+    const t = registry.getTemplate('gobuster.dir.v1')!;
+    const res = await generateCommand({
+      template: t,
+      target: makeTarget(),
+      suppliedParams: { url: 'https://example.com', wordlist: '/usr/share/wordlists/common.txt' },
+      authorizations: [makeAuth()],
+      now: NOW,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.type).toBe('tool-not-installed');
+  });
+
+  it('generates a risk-0 git command with no authorization', async () => {
+    const t = registry.getTemplate('git.status.v1')!;
+    const res = await generateCommand({
+      template: t,
+      target: makeTarget(),
+      suppliedParams: {},
+      authorizations: [],
+      now: NOW,
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  it('validates registered fixtures for all templates', async () => {
+    for (const t of registry.allTemplates()) {
+      for (const fx of registry.fixturesFor(t.id)) {
+        const res = await generateCommand({
+          template: t,
+          target: makeTarget(),
+          suppliedParams: fx.inputs,
+          authorizations: [makeAuth()],
+          now: NOW,
+        });
+        expect(res.ok, `${t.id}: expected fixture to generate`).toBe(true);
+        if (res.ok) expect(res.candidate.command).toBe(fx.expectedCommand);
+      }
+    }
   });
 });
