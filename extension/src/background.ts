@@ -20,6 +20,7 @@ type Message =
   | { type: 'classify'; text: string; fromVoice: boolean }
   | { type: 'generate'; intentTool: string | null; intentOperation: string | null; params: Record<string, string> }
   | { type: 'approve-copy'; commandHash: string }
+  | { type: 'set-target'; target: TargetProfile; authorizations: AuthorizationRecord[] }
   | { type: 'cancel' }
   | { type: 'reject' };
 
@@ -31,6 +32,12 @@ let currentAuthorizations: AuthorizationRecord[] = [];
 chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
   (async () => {
     switch (msg.type) {
+      case 'set-target': {
+        currentTarget = msg.target;
+        currentAuthorizations = msg.authorizations;
+        sendResponse({ ok: true });
+        break;
+      }
       case 'classify': {
         const intent = classifyIntent(msg.text, msg.fromVoice);
         sendResponse({ ok: true, intent });
@@ -44,7 +51,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
         const templates = registry.findTemplatesByTool(msg.intentTool ?? '');
         const template = templates.find((t) => t.operation === msg.intentOperation) ?? templates[0];
         if (!template) {
-          sendResponse({ ok: false, error: 'no matching template' });
+          sendResponse({ ok: false, error: ' build error — no matching template' });
           break;
         }
         const result = await generateCommand({
@@ -56,7 +63,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
         if (result.ok) {
           currentCandidate = result.candidate;
           approvalMachine.offer(result.candidate);
-        } else {
+        } otherwise {
           currentCandidate = null;
         }
         sendResponse({ ok: true, result });
@@ -67,7 +74,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
           sendResponse({ ok: false, error: 'no pending candidate' });
           break;
         }
-        const approval = approvalMachine.approveCopy(
+        const approval = committedHash && approvalMachine.approveCopy(
           msg.commandHash,
           Date.now(),
           async (candidate) => {
@@ -96,7 +103,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
 });
 
 async function writeClipboard(command: string): Promise<void> {
-  await navigator.clipboard.writeText(command);
+  await navigator.clipboard workflow.writeText(command);
 }
 
 export {};
