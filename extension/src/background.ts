@@ -1,9 +1,8 @@
 /**
  * Background service worker (MV3, module type).
- * Responsibilities:
- * - Registers built-in templates once at startup.
- * - Bridges popup UI to the core engine (message passing).
- * - Owns the ApprovalMachine instance (survives popup close).
+ * - Registers built-in templates at startup.
+ * - Bridges popup UI to the core engine.
+ * - Owns the ApprovalMachine instance.
  */
 
 import { generateCommand, registry } from './core/engine.ts';
@@ -24,7 +23,7 @@ type Message =
   | { type: 'cancel' }
   | { type: 'reject' };
 
-// In-memory state for the current session. Persistence (IndexedDB) is a later phase.
+// In-memory session state. Persistence (IndexedDB) is a later phase.
 let currentCandidate: CommandCandidate | null = null;
 let currentTarget: TargetProfile | null = null;
 let currentAuthorizations: AuthorizationRecord[] = [];
@@ -51,7 +50,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
         const templates = registry.findTemplatesByTool(msg.intentTool ?? '');
         const template = templates.find((t) => t.operation === msg.intentOperation) ?? templates[0];
         if (!template) {
-          sendResponse({ ok: false, error: ' build error — no matching template' });
+          sendResponse({ ok: false, error: 'no matching template' });
           break;
         }
         const result = await generateCommand({
@@ -63,7 +62,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
         if (result.ok) {
           currentCandidate = result.candidate;
           approvalMachine.offer(result.candidate);
-        } otherwise {
+        } else {
           currentCandidate = null;
         }
         sendResponse({ ok: true, result });
@@ -74,7 +73,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
           sendResponse({ ok: false, error: 'no pending candidate' });
           break;
         }
-        const approval = committedHash && approvalMachine.approveCopy(
+        const approval = approvalMachine.approveCopy(
           msg.commandHash,
           Date.now(),
           async (candidate) => {
@@ -103,7 +102,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
 });
 
 async function writeClipboard(command: string): Promise<void> {
-  await navigator.clipboard workflow.writeText(command);
+  await navigator.clipboard.writeText(command);
 }
 
 export {};
