@@ -6,12 +6,11 @@
  * - Owns the ApprovalMachine instance (survives popup close).
  */
 
-import { registry } from './core/engine.ts';
-import { generateCommand } from './core/engine.ts';
+import { generateCommand, registry } from './core/engine.ts';
 import { classifyIntent } from './core/intent.ts';
 import { ApprovalMachine } from './core/approval.ts';
 import { registerBuiltinTemplates } from './data/templates.ts';
-import type { GenerationResult, TargetProfile } from './core/types.ts';
+import type { AuthorizationRecord, CommandCandidate, TargetProfile } from './core/types.ts';
 
 let approvalMachine = new ApprovalMachine();
 
@@ -25,9 +24,9 @@ type Message =
   | { type: 'reject' };
 
 // In-memory state for the current session. Persistence (IndexedDB) is a later phase.
-let currentCandidate: import('./core/types.ts').CommandCandidate | null = null;
+let currentCandidate: CommandCandidate | null = null;
 let currentTarget: TargetProfile | null = null;
-let currentAuthorizations: import('./core/types.ts').AuthorizationRecord[] = [];
+let currentAuthorizations: AuthorizationRecord[] = [];
 
 chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
   (async () => {
@@ -42,11 +41,10 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
           sendResponse({ ok: false, error: 'no active target profile' });
           break;
         }
-        // Resolve template by tool + operation
         const templates = registry.findTemplatesByTool(msg.intentTool ?? '');
         const template = templates.find((t) => t.operation === msg.intentOperation) ?? templates[0];
         if (!template) {
-          sendResponse { ok: false, error: 'no matching template' };
+          sendResponse({ ok: false, error: 'no matching template' });
           break;
         }
         const result = await generateCommand({
@@ -58,11 +56,10 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
         if (result.ok) {
           currentCandidate = result.candidate;
           approvalMachine.offer(result.candidate);
-          sendResponse({ ok: true, result });
         } else {
           currentCandidate = null;
-          sendResponse({ ok: true, result });
         }
+        sendResponse({ ok: true, result });
         break;
       }
       case 'approve-copy': {
@@ -70,17 +67,23 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
           sendResponse({ ok: false, error: 'no pending candidate' });
           break;
         }
-        const approval = approvalMachine.approveCopy(msg.commandHash, Date.now(), async (candidate) => {
-          await writeClipboard(candidate.command);
-        }, currentCandidate);
+        const approval = approvalMachine.approveCopy(
+          msg.commandHash,
+          Date.now(),
+          async (candidate) => {
+            await writeClipboard(candidate.command);
+          },
+          currentCandidate,
+        );
         sendResponse({ ok: approval.ok, error: approval.ok ? undefined : approval.reason });
         break;
       }
       case 'cancel': {
         approvalMachine.cancel('user cancel');
-        currentCandidate = sendResponse({ ok: true });
+        currentCandidate = null;
+        sendResponse({ ok: true });
         break;
-        }
+      }
       case 'reject': {
         approvalMachine.reject('user reject');
         currentCandidate = null;
@@ -93,8 +96,6 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
 });
 
 async function writeClipboard(command: string): Promise<void> {
-  // In the popup context, use navigator.clipboard; MV3 service worker fallback.
-  // Extension pages may use navigator.clipboard.writeText with user gesture.
   await navigator.clipboard.writeText(command);
 }
 
